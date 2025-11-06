@@ -1,49 +1,42 @@
-
-
+# ===============================================
+# 🎌 Anime Hybrid Recommender System (Cloud-Safe)
+# ===============================================
 import streamlit as st
 import pandas as pd
 import numpy as np
 import json
+import os
+import pathlib
 from scipy import sparse
 from sklearn.neighbors import NearestNeighbors
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-import sys
-st.sidebar.info(f"Python version: {sys.version}")
-
-
 
 # -------------------------
-# Load artifact + data (NO CACHING)
+# Paths (relative, cross-platform)
 # -------------------------
-import os
-
-#ART_PATH = r"C:\Users\Dewald\Documents\GitHub\2501PTDS-Unsupervised-Learning\Data\anime_hybrid_recommender.json"
-#ANIME_PATH = r"C:\Users\Dewald\Documents\GitHub\2501PTDS-Unsupervised-Learning\Data\anime.csv"
-
-import pathlib
-
-BASE_DIR = pathlib.Path(__file__).resolve().parent.parent  # go up from Streamlit/ to project root
+BASE_DIR = pathlib.Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "Data"
 
 ART_PATH = DATA_DIR / "anime_hybrid_recommender.json"
 ANIME_PATH = DATA_DIR / "anime.csv"
 
-
+# -------------------------
+# Load artifact + data
+# -------------------------
 def load_artifact():
     """Load JSON and rebuild the sparse matrix — no Streamlit caching."""
-    if not os.path.exists(ART_PATH):
+    if not ART_PATH.exists():
         st.error(f"❌ Artifact file not found at: {ART_PATH}")
+        st.info("Please ensure the JSON file is included in the repository.")
         st.stop()
 
     with open(ART_PATH, "r", encoding="utf-8") as f:
         artifact = json.load(f)
 
-    # Reconstruct sparse matrix safely
     r = artifact["R_csr"]
     R = sparse.csr_matrix((r["data"], r["indices"], r["indptr"]),
                           shape=tuple(r["shape"]))
-
     user_ids = np.array(artifact["user_ids"])
     item_ids = np.array(artifact["item_ids"])
     user_mean = np.array(artifact["user_mean"])
@@ -54,24 +47,42 @@ def load_artifact():
     return R, user_ids, item_ids, user_mean, item_mean, global_mean, best_alpha
 
 
-# Load once (direct call)
-R, user_ids, item_ids, user_mean, item_mean, global_mean, best_alpha = load_artifact()
+# -------------------------
+# App startup
+# -------------------------
+st.title("🎌 Anime Hybrid Recommender System")
+st.markdown("This app blends collaborative filtering and content-based "
+            "recommendations to suggest anime you’ll love!")
 
+# Debug info (check runtime in sidebar)
+import sys
+st.sidebar.caption(f"🧠 Python version: {sys.version.split()[0]}")
 
+# Load data
+try:
+    R, user_ids, item_ids, user_mean, item_mean, global_mean, best_alpha = load_artifact()
+except Exception as e:
+    st.error(f"⚠️ Failed to load artifact: {e}")
+    st.stop()
 
-# Load anime metadata
+if not ANIME_PATH.exists():
+    st.error(f"❌ Anime metadata not found at: {ANIME_PATH}")
+    st.stop()
+
 anime_df = pd.read_csv(ANIME_PATH)
 anime_lookup = dict(zip(anime_df["anime_id"], anime_df["name"]))
 
 # -------------------------
-# Build neighbors once
+# Build neighbors (CB + CF)
 # -------------------------
 meta_cols = [c for c in ["genre", "type", "name", "episodes"] if c in anime_df.columns]
 anime_df["__text__"] = anime_df[meta_cols].astype(str).agg(" ".join, axis=1)
-anime_meta = pd.DataFrame({"anime_id": item_ids}).merge(anime_df[["anime_id", "__text__"]], on="anime_id", how="left").fillna({"__text__": ""})
+anime_meta = pd.DataFrame({"anime_id": item_ids}).merge(
+    anime_df[["anime_id", "__text__"]], on="anime_id", how="left").fillna({"__text__": ""})
 
 tfidf = TfidfVectorizer(max_features=20000, ngram_range=(1, 2), min_df=3)
 tfidf_item = tfidf.fit_transform(anime_meta["__text__"])
+
 cb_knn = NearestNeighbors(metric="cosine", algorithm="brute", n_neighbors=30)
 cb_knn.fit(tfidf_item)
 cb_dists, cb_inds = cb_knn.kneighbors(tfidf_item, n_neighbors=30, return_distance=True)
@@ -84,21 +95,24 @@ cf_dists, cf_inds = cf_knn.kneighbors(R.T, n_neighbors=30, return_distance=True)
 cf_sims = 1.0 - cf_dists
 cf_inds, cf_sims = cf_inds[:, 1:], cf_sims[:, 1:]
 
+# -------------------------
 # Build quick lookup per user
+# -------------------------
 user_rdict = []
 for u in range(R.shape[0]):
     s, e = R.indptr[u], R.indptr[u + 1]
     user_rdict.append({int(i): float(r) for i, r in zip(R.indices[s:e], R.data[s:e])})
 
+
 # -------------------------
 # Predictor functions
 # -------------------------
-def predict_from_neighbors(uidx: int, iidx: int, neigh_idx: np.ndarray, neigh_sim: np.ndarray) -> float:
+def predict_from_neighbors(uidx: int, iidx: int, neigh_idx, neigh_sim):
     max_idx = R.shape[1] - 1
     valid_pairs = [(int(nb), float(s))
                    for nb, s in zip(neigh_idx[iidx], neigh_sim[iidx])
                    if 0 <= nb <= max_idx]
-    numer, denom = 0.0, 0.0
+    numer = denom = 0.0
     rdict = user_rdict[uidx]
     for nb, s in valid_pairs:
         r = rdict.get(nb)
@@ -109,12 +123,14 @@ def predict_from_neighbors(uidx: int, iidx: int, neigh_idx: np.ndarray, neigh_si
         return numer / denom
     return float(0.5 * user_mean[uidx] + 0.5 * item_mean[iidx])
 
-def predict_hybrid(uidx: int, iidx: int, alpha: float) -> float:
+
+def predict_hybrid(uidx: int, iidx: int, alpha: float):
     p_cf = predict_from_neighbors(uidx, iidx, cf_inds, cf_sims)
     p_cb = predict_from_neighbors(uidx, iidx, cb_inds, cb_sims)
     return alpha * p_cf + (1 - alpha) * p_cb
 
-def recommend_for_user(user_id: int, top_n: int = 10) -> pd.DataFrame:
+
+def recommend_for_user(user_id: int, top_n: int = 10):
     if user_id not in user_ids:
         st.warning(f"User ID {user_id} not found in training data.")
         return pd.DataFrame()
@@ -126,9 +142,9 @@ def recommend_for_user(user_id: int, top_n: int = 10) -> pd.DataFrame:
         if iidx not in rated_items:
             try:
                 p = predict_hybrid(uidx, iidx, best_alpha)
-            except IndexError:
+                preds.append((iidx, p))
+            except Exception:
                 continue
-            preds.append((iidx, p))
     preds = sorted(preds, key=lambda x: x[1], reverse=True)[:top_n]
     recs = pd.DataFrame({
         "anime_id": [int(item_ids[i]) for i, _ in preds],
@@ -137,14 +153,17 @@ def recommend_for_user(user_id: int, top_n: int = 10) -> pd.DataFrame:
     recs["name"] = recs["anime_id"].map(anime_lookup)
     return recs[["anime_id", "name", "predicted_rating"]]
 
+
 # -------------------------
 # Streamlit UI
 # -------------------------
-st.title("🎌 Anime Hybrid Recommender System")
-st.markdown("This app blends collaborative filtering and content-based recommendations to suggest anime you’ll love!")
-
 st.sidebar.header("🔧 Settings")
-user_id_input = st.sidebar.number_input("Enter a User ID:", min_value=int(user_ids.min()), max_value=int(user_ids.max()), value=int(user_ids[0]))
+user_id_input = st.sidebar.number_input(
+    "Enter a User ID:",
+    min_value=int(user_ids.min()),
+    max_value=int(user_ids.max()),
+    value=int(user_ids[0]),
+)
 top_n = st.sidebar.slider("How many recommendations?", 5, 20, 10)
 
 if st.sidebar.button("Get Recommendations"):

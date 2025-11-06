@@ -1,5 +1,4 @@
-
-
+# ===============================================
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -9,27 +8,20 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 # -------------------------
-# Load artifact + data (NO CACHING)
+# Load artifact + data
 # -------------------------
-import os
-
 ART_PATH = r"C:\Users\Dewald\Documents\GitHub\2501PTDS-Unsupervised-Learning\Data\anime_hybrid_recommender.json"
 ANIME_PATH = r"C:\Users\Dewald\Documents\GitHub\2501PTDS-Unsupervised-Learning\Data\anime.csv"
 
 
+@st.cache_resource
 def load_artifact():
-    """Load JSON and rebuild the sparse matrix — no Streamlit caching."""
-    if not os.path.exists(ART_PATH):
-        st.error(f"❌ Artifact file not found at: {ART_PATH}")
-        st.stop()
-
     with open(ART_PATH, "r", encoding="utf-8") as f:
         artifact = json.load(f)
 
-    # Reconstruct sparse matrix safely
+    # Restore sparse matrix
     r = artifact["R_csr"]
-    R = sparse.csr_matrix((r["data"], r["indices"], r["indptr"]),
-                          shape=tuple(r["shape"]))
+    R = sparse.csr_matrix((r["data"], r["indices"], r["indptr"]), shape=tuple(r["shape"]))
 
     user_ids = np.array(artifact["user_ids"])
     item_ids = np.array(artifact["item_ids"])
@@ -40,11 +32,7 @@ def load_artifact():
 
     return R, user_ids, item_ids, user_mean, item_mean, global_mean, best_alpha
 
-
-# Load once (direct call)
 R, user_ids, item_ids, user_mean, item_mean, global_mean, best_alpha = load_artifact()
-
-
 
 # Load anime metadata
 anime_df = pd.read_csv(ANIME_PATH)

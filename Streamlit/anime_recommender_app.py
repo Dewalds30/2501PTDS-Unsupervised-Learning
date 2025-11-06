@@ -8,6 +8,11 @@ from scipy import sparse
 from sklearn.neighbors import NearestNeighbors
 from sklearn.feature_extraction.text import TfidfVectorizer
 
+import sys
+st.sidebar.info(f"Python version: {sys.version}")
+
+
+
 # -------------------------
 # Load artifact + data (NO CACHING)
 # -------------------------

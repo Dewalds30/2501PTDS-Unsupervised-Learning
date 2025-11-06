@@ -18,8 +18,16 @@ st.sidebar.info(f"Python version: {sys.version}")
 # -------------------------
 import os
 
-ART_PATH = r"C:\Users\Dewald\Documents\GitHub\2501PTDS-Unsupervised-Learning\Data\anime_hybrid_recommender.json"
-ANIME_PATH = r"C:\Users\Dewald\Documents\GitHub\2501PTDS-Unsupervised-Learning\Data\anime.csv"
+#ART_PATH = r"C:\Users\Dewald\Documents\GitHub\2501PTDS-Unsupervised-Learning\Data\anime_hybrid_recommender.json"
+#ANIME_PATH = r"C:\Users\Dewald\Documents\GitHub\2501PTDS-Unsupervised-Learning\Data\anime.csv"
+
+import pathlib
+
+BASE_DIR = pathlib.Path(__file__).resolve().parent.parent  # go up from Streamlit/ to project root
+DATA_DIR = BASE_DIR / "Data"
+
+ART_PATH = DATA_DIR / "anime_hybrid_recommender.json"
+ANIME_PATH = DATA_DIR / "anime.csv"
 
 
 def load_artifact():

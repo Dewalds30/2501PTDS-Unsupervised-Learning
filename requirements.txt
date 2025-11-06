@@ -1,0 +1,26 @@
+# Core data packages
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+
+# Machine learning
+scikit-learn==1.5.2
+
+# Streamlit
+streamlit==1.39.0
+
+# Optional (if you use TF-IDF or cosine similarity)
+joblib
+
+
+
+streamlit
+pandas
+scikit-learn
+nltk
+joblib
+numpy
+matplotlib
+scipy
+
+

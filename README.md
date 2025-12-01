@@ -57,6 +57,7 @@ This dataset contains information on anime content (movies, television series, m
 To carry out all the objectives for this repo, the following necessary dependencies were loaded:
 + `Pandas 2.2.2` and `Numpy 1.26`
 + `Matplotlib 3.8.4`
++ `JSON`
  
 
 ## 4. Environment <a class="anchor" id="environment"></a>
@@ -85,7 +86,7 @@ pip install -r requirements.txt
 
 | Name                                                                                        |  Email              
 |---------------------------------------------------------------------------------------------|--------------------             
-| [Team Member 1](https://github.com/<username>)                                              | team_member_email@example.com
+| [Dewald Scriven](https://github.com/<Dewalds30>)                                            | dewald.scriven@gmail.com
 
 
 
